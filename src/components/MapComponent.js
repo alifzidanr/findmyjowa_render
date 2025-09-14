@@ -25,6 +25,7 @@ const MapComponent = forwardRef(({
   // Expose map control methods to parent
   useImperativeHandle(ref, () => ({
     zoomToDevice: (deviceId) => {
+      console.log('zoomToDevice called with:', deviceId)
       const device = devices.find(d => d.device_id === deviceId)
       if (device && mapInstanceRef.current) {
         const lat = parseFloat(device.latitude)
@@ -38,12 +39,18 @@ const MapComponent = forwardRef(({
         }
       }
     },
-    fitBounds: (deviceIds) => {
-      if (!mapInstanceRef.current || !deviceIds.length) return
+    showBothDevices: (deviceIds) => {
+      console.log('showBothDevices called with:', deviceIds)
+      if (!mapInstanceRef.current || !deviceIds.length) {
+        console.log('Early return: no map or device IDs')
+        return
+      }
       
       const validDevices = devices.filter(d => 
         deviceIds.includes(d.device_id) && d.latitude && d.longitude
       )
+      
+      console.log('Valid devices found:', validDevices.length)
       
       if (validDevices.length === 0) return
       
@@ -77,6 +84,8 @@ const MapComponent = forwardRef(({
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
         const distance = R * c // Distance in meters
         
+        console.log('Calculated distance:', distance)
+        
         // Determine zoom level and padding based on distance
         let maxZoom, padding
         
@@ -105,6 +114,8 @@ const MapComponent = forwardRef(({
           maxZoom = 9
           padding = [50, 50]
         }
+        
+        console.log('Using maxZoom:', maxZoom, 'padding:', padding)
         
         mapInstanceRef.current.fitBounds(bounds, { 
           padding: padding,

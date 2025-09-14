@@ -218,19 +218,23 @@ export default function Home() {
           setLocationPermission('denied')
           
           let errorMessage = 'Location access failed: '
-          switch(error.code) {
-            case error.PERMISSION_DENIED:
-              errorMessage += 'Permission denied by user'
-              break
-            case error.POSITION_UNAVAILABLE:
-              errorMessage += 'Position unavailable'
-              break
-            case error.TIMEOUT:
-              errorMessage += 'Request timeout'
-              break
-            default:
-              errorMessage += 'Unknown error'
-              break
+          if (error && error.code) {
+            switch(error.code) {
+              case 1: // PERMISSION_DENIED
+                errorMessage += 'Permission denied by user'
+                break
+              case 2: // POSITION_UNAVAILABLE
+                errorMessage += 'Position unavailable'
+                break
+              case 3: // TIMEOUT
+                errorMessage += 'Request timeout'
+                break
+              default:
+                errorMessage += 'Unknown error'
+                break
+            }
+          } else {
+            errorMessage += 'Geolocation not supported or blocked'
           }
           
           toast.error(errorMessage)
@@ -313,8 +317,7 @@ export default function Home() {
         .select()
         .single()
 
-      if (error) {
-        console.error('Error saving device:', error)
+      if (error) {console.error('Error saving device:', error)
         toast.error('Error saving device: ' + error.message)
         return
       }
@@ -534,10 +537,17 @@ export default function Home() {
   const zoomToDevice = (deviceId) => {
     const device = allDeviceLocations.find(d => d.device_id === deviceId)
     if (device && mapRef.current) {
-      setSelectedDevice(device)
-      // Close sidebar on mobile after selecting device
-      setActiveSidebar(null)
-      toast.success(`Zoomed to ${device.device_name}`)
+      // Use the correct method name
+      if (typeof mapRef.current.zoomToDevice === 'function') {
+        mapRef.current.zoomToDevice(deviceId)
+        setSelectedDevice(device)
+        // Close sidebar on mobile after selecting device
+        setActiveSidebar(null)
+        toast.success(`Zoomed to ${device.device_name}`)
+      } else {
+        console.error('zoomToDevice method not found')
+        toast.error('Map not ready. Please try again.')
+      }
     }
   }
 
@@ -843,7 +853,7 @@ export default function Home() {
                     ⚡ <span className="hidden lg:inline">{Math.round(movementSpeed)} km/h</span>
                   </div>
                 )}
-                </div>
+              </div>
               
               <span className="hidden sm:inline text-xs sm:text-sm text-gray-600 truncate max-w-20 sm:max-w-none">
                 {user?.email}
@@ -1059,32 +1069,52 @@ export default function Home() {
                   <div className="mt-4 space-y-2">
                     <button
                       onClick={() => {
+                        console.log('Show Both on Map clicked')
+                        console.log('mapRef.current:', mapRef.current)
+                        
                         const fromDevice = allDeviceLocations.find(d => d.device_id === distanceFrom)
                         const toDevice = allDeviceLocations.find(d => d.device_id === distanceTo)
                         
+                        console.log('fromDevice:', fromDevice)
+                        console.log('toDevice:', toDevice)
+                        
                         if (fromDevice && toDevice && mapRef.current) {
-                          // Use the map's fitBounds method to show both devices
-                          mapRef.current.fitBounds([distanceFrom, distanceTo])
-                          
-                          // Also clear any single device selection to show both
-                          setSelectedDevice(null)
-                          
-                          // Close sidebar on mobile after action
-                          setActiveSidebar(null)
-                          
-                          // Determine zoom level message based on distance
-                          let zoomMessage = ''
-                          if (calculatedDistance < 100) {
-                            zoomMessage = 'Zooming in - devices are very close'
-                          } else if (calculatedDistance < 1000) {
-                            zoomMessage = 'Adjusting zoom for nearby devices'
-                          } else if (calculatedDistance < 10000) {
-                            zoomMessage = 'Zooming out to show both devices'
+                          // Check if the method exists
+                          if (typeof mapRef.current.showBothDevices === 'function') {
+                            console.log('Calling showBothDevices with:', [distanceFrom, distanceTo])
+                            mapRef.current.showBothDevices([distanceFrom, distanceTo])
+                            
+                            // Also clear any single device selection to show both
+                            setSelectedDevice(null)
+                            
+                            // Close sidebar on mobile after action
+                            setActiveSidebar(null)
+                            
+                            // Determine zoom level message based on distance
+                            let zoomMessage = ''
+                            if (calculatedDistance < 100) {
+                              zoomMessage = 'Zooming in - devices are very close'
+                            } else if (calculatedDistance < 1000) {
+                              zoomMessage = 'Adjusting zoom for nearby devices'
+                            } else if (calculatedDistance < 10000) {
+                              zoomMessage = 'Zooming out to show both devices'
+                            } else {
+                              zoomMessage = 'Wide view - devices are far apart'
+                            }
+                            
+                            toast.success(`${zoomMessage}: ${fromDevice.device_name} and ${toDevice.device_name}`)
                           } else {
-                            zoomMessage = 'Wide view - devices are far apart'
+                            console.error('showBothDevices method not found on mapRef.current')
+                            console.log('Available methods:', Object.keys(mapRef.current || {}))
+                            toast.error('Map method not available. Please try refreshing the page.')
                           }
-                          
-                          toast.success(`${zoomMessage}: ${fromDevice.device_name} and ${toDevice.device_name}`)
+                        } else {
+                          console.log('Missing required data:', {
+                            fromDevice: !!fromDevice,
+                            toDevice: !!toDevice,
+                            mapRef: !!mapRef.current
+                          })
+                          toast.error('Please ensure both devices are selected and the map is loaded.')
                         }
                       }}
                       className="w-full bg-blue-600 text-white py-2 px-4 rounded-md text-sm hover:bg-blue-700"
