@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+// src/components/MapComponent.js
+import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 
@@ -10,10 +11,57 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 })
 
-const MapComponent = ({ devices = [], height = '400px', showAllDevices = false }) => {
+const MapComponent = forwardRef(({ 
+  devices = [], 
+  height = '400px', 
+  showAllDevices = false, 
+  selectedDevice = null,
+  onDeviceSelect = null 
+}, ref) => {
   const mapRef = useRef(null)
   const mapInstanceRef = useRef(null)
   const markersRef = useRef({})
+
+  // Expose map control methods to parent
+  useImperativeHandle(ref, () => ({
+    zoomToDevice: (deviceId) => {
+      const device = devices.find(d => d.device_id === deviceId)
+      if (device && mapInstanceRef.current) {
+        const lat = parseFloat(device.latitude)
+        const lng = parseFloat(device.longitude)
+        mapInstanceRef.current.setView([lat, lng], 16)
+        
+        // Open popup for the device
+        const marker = markersRef.current[deviceId]
+        if (marker) {
+          marker.openPopup()
+        }
+      }
+    },
+    fitBounds: (deviceIds) => {
+      if (!mapInstanceRef.current || !deviceIds.length) return
+      
+      const validDevices = devices.filter(d => 
+        deviceIds.includes(d.device_id) && d.latitude && d.longitude
+      )
+      
+      if (validDevices.length === 0) return
+      
+      if (validDevices.length === 1) {
+        const device = validDevices[0]
+        mapInstanceRef.current.setView([parseFloat(device.latitude), parseFloat(device.longitude)], 16)
+      } else {
+        const bounds = L.latLngBounds()
+        validDevices.forEach(device => {
+          bounds.extend([parseFloat(device.latitude), parseFloat(device.longitude)])
+        })
+        mapInstanceRef.current.fitBounds(bounds, { 
+          padding: [20, 20],
+          maxZoom: 16
+        })
+      }
+    }
+  }))
 
   useEffect(() => {
     if (!mapRef.current) return
@@ -36,6 +84,23 @@ const MapComponent = ({ devices = [], height = '400px', showAllDevices = false }
       }
     }
   }, [])
+
+  // Handle selectedDevice changes
+  useEffect(() => {
+    if (selectedDevice && mapInstanceRef.current) {
+      const lat = parseFloat(selectedDevice.latitude)
+      const lng = parseFloat(selectedDevice.longitude)
+      
+      // Zoom to selected device
+      mapInstanceRef.current.setView([lat, lng], 16)
+      
+      // Open popup for selected device
+      const marker = markersRef.current[selectedDevice.device_id]
+      if (marker) {
+        marker.openPopup()
+      }
+    }
+  }, [selectedDevice])
 
   useEffect(() => {
     if (!mapInstanceRef.current) return
@@ -73,18 +138,22 @@ const MapComponent = ({ devices = [], height = '400px', showAllDevices = false }
         markerColor = '#ef4444' // Red - offline or stale
       }
 
+      // Check if this is the selected device
+      const isSelected = selectedDevice && selectedDevice.device_id === device.device_id
+
       // Create custom marker with device name label
       const customIcon = L.divIcon({
         html: `
           <div style="display: flex; flex-direction: column; align-items: center;">
             <div style="
               background-color: ${markerColor};
-              width: 16px;
-              height: 16px;
+              width: ${isSelected ? '20px' : '16px'};
+              height: ${isSelected ? '20px' : '16px'};
               border-radius: 50%;
-              border: 3px solid white;
+              border: 3px solid ${isSelected ? '#3b82f6' : 'white'};
               box-shadow: 0 2px 6px rgba(0,0,0,0.3);
               position: relative;
+              ${isSelected ? 'animation: pulse 2s infinite;' : ''}
             ">
               ${device.speed && device.speed > 10 ? `
                 <div style="
@@ -100,11 +169,11 @@ const MapComponent = ({ devices = [], height = '400px', showAllDevices = false }
               ` : ''}
             </div>
             <div style="
-              background: rgba(0,0,0,0.8);
+              background: ${isSelected ? '#3b82f6' : 'rgba(0,0,0,0.8)'};
               color: white;
               padding: 2px 6px;
               border-radius: 4px;
-              font-size: 11px;
+              font-size: ${isSelected ? '12px' : '11px'};
               font-weight: 500;
               white-space: nowrap;
               margin-top: 4px;
@@ -113,15 +182,29 @@ const MapComponent = ({ devices = [], height = '400px', showAllDevices = false }
               ${device.device_name || 'Unknown Device'}
             </div>
           </div>
+          <style>
+            @keyframes pulse {
+              0% { transform: scale(1); }
+              50% { transform: scale(1.1); }
+              100% { transform: scale(1); }
+            }
+          </style>
         `,
         className: 'custom-device-marker',
-        iconSize: [100, 50],
-        iconAnchor: [50, 25]
+        iconSize: [120, 60],
+        iconAnchor: [60, 30]
       })
 
       // Create marker
       const marker = L.marker([lat, lng], { icon: customIcon })
         .addTo(mapInstanceRef.current)
+
+      // Add click handler to marker
+      marker.on('click', () => {
+        if (onDeviceSelect) {
+          onDeviceSelect(device)
+        }
+      })
 
       // Create detailed popup content
       const timeSinceUpdate = timeDiff < 1 ? 'Just now' : 
@@ -142,6 +225,7 @@ const MapComponent = ({ devices = [], height = '400px', showAllDevices = false }
             <h3 style="margin: 0; font-weight: bold; font-size: 16px;">
               ${device.device_name || 'Unknown Device'}
             </h3>
+            ${isSelected ? '<span style="margin-left: 8px; color: #3b82f6; font-size: 12px;">● SELECTED</span>' : ''}
           </div>
           
           ${device.username ? `
@@ -190,6 +274,25 @@ const MapComponent = ({ devices = [], height = '400px', showAllDevices = false }
           <p style="margin: 0; color: #888; font-size: 12px;">
             📍 ${lat.toFixed(6)}, ${lng.toFixed(6)}
           </p>
+          
+          ${onDeviceSelect ? `
+            <div style="margin-top: 8px;">
+              <button 
+                onclick="window.selectDevice && window.selectDevice('${device.device_id}')"
+                style="
+                  background: #3b82f6;
+                  color: white;
+                  border: none;
+                  padding: 4px 8px;
+                  border-radius: 4px;
+                  font-size: 12px;
+                  cursor: pointer;
+                "
+              >
+                ${isSelected ? 'Selected' : 'Select Device'}
+              </button>
+            </div>
+          ` : ''}
         </div>
       `
 
@@ -202,8 +305,18 @@ const MapComponent = ({ devices = [], height = '400px', showAllDevices = false }
       bounds.extend([lat, lng])
     })
 
-    // Fit map to show all markers
-    if (hasValidCoordinates && devices.length > 0) {
+    // Set up global function for popup button clicks
+    if (onDeviceSelect) {
+      window.selectDevice = (deviceId) => {
+        const device = devices.find(d => d.device_id === deviceId)
+        if (device) {
+          onDeviceSelect(device)
+        }
+      }
+    }
+
+    // Fit map to show all markers (only if no specific device is selected)
+    if (hasValidCoordinates && devices.length > 0 && !selectedDevice) {
       if (devices.length === 1) {
         // Single device - center on it with good zoom level
         const device = devices[0]
@@ -217,7 +330,7 @@ const MapComponent = ({ devices = [], height = '400px', showAllDevices = false }
       }
     }
 
-  }, [devices])
+  }, [devices, selectedDevice, onDeviceSelect])
 
   return (
     <div className="rounded-lg overflow-hidden shadow-md border relative">
@@ -247,6 +360,12 @@ const MapComponent = ({ devices = [], height = '400px', showAllDevices = false }
             <div className="w-3 h-3 rounded-full bg-blue-500 mr-2"></div>
             <span className="text-xs">Moving fast</span>
           </div>
+          {selectedDevice && (
+            <div className="flex items-center border-t pt-1 mt-1">
+              <div className="w-3 h-3 rounded-full bg-blue-600 border border-white mr-2"></div>
+              <span className="text-xs font-medium">Selected</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -255,11 +374,30 @@ const MapComponent = ({ devices = [], height = '400px', showAllDevices = false }
         <div className="absolute top-4 right-4 bg-white bg-opacity-95 px-3 py-2 rounded-lg shadow-md z-10">
           <div className="text-sm font-medium text-gray-900">
             {devices.length} device{devices.length !== 1 ? 's' : ''} visible
+            {selectedDevice && (
+              <div className="text-xs text-blue-600 mt-1">
+                Selected: {selectedDevice.device_name}
+              </div>
+            )}
           </div>
+        </div>
+      )}
+
+      {/* Clear selection button */}
+      {selectedDevice && onDeviceSelect && (
+        <div className="absolute top-4 left-4 bg-white bg-opacity-95 px-3 py-2 rounded-lg shadow-md z-10">
+          <button
+            onClick={() => onDeviceSelect(null)}
+            className="text-xs text-gray-600 hover:text-gray-800"
+          >
+            ✕ Clear selection
+          </button>
         </div>
       )}
     </div>
   )
-}
+})
+
+MapComponent.displayName = 'MapComponent'
 
 export default MapComponent

@@ -1,3 +1,4 @@
+// src/pages/api/socket.js
 import { Server } from 'socket.io'
 import { supabase } from '../../lib/supabase'
 

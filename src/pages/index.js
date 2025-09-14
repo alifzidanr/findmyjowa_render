@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+//src/pages/index.js
+import { useState, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { supabase } from '../lib/supabase'
 import io from 'socket.io-client'
@@ -13,7 +14,11 @@ import {
   ClockIcon,
   PlusIcon,
   MagnifyingGlassIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  ArrowsRightLeftIcon,
+  EyeIcon,
+  ListBulletIcon,
+  CalculatorIcon
 } from '@heroicons/react/24/outline'
 
 // Dynamically import Map component to avoid SSR issues
@@ -41,9 +46,9 @@ export default function Home() {
   const [isDeviceSetupComplete, setIsDeviceSetupComplete] = useState(false)
   const [deviceName, setDeviceName] = useState('')
   const [showDeviceNaming, setShowDeviceNaming] = useState(false)
-  const [locationPermission, setLocationPermission] = useState('prompt') // 'granted', 'denied', 'prompt'
+  const [locationPermission, setLocationPermission] = useState('prompt')
   const [isOnline, setIsOnline] = useState(navigator.onLine)
-  const [locationStatus, setLocationStatus] = useState('checking') // 'checking', 'granted', 'denied', 'unavailable'
+  const [locationStatus, setLocationStatus] = useState('checking')
   
   // Movement detection
   const [lastPosition, setLastPosition] = useState(null)
@@ -55,6 +60,17 @@ export default function Home() {
   const [allUsers, setAllUsers] = useState([])
   const [currentTab, setCurrentTab] = useState('map')
   const [searchTerm, setSearchTerm] = useState('')
+  
+  // New states for enhanced features
+  const [showDevicesList, setShowDevicesList] = useState(false)
+  const [selectedDevice, setSelectedDevice] = useState(null)
+  const [showDistanceCalculator, setShowDistanceCalculator] = useState(false)
+  const [distanceFrom, setDistanceFrom] = useState('')
+  const [distanceTo, setDistanceTo] = useState('')
+  const [calculatedDistance, setCalculatedDistance] = useState(null)
+
+  // Map reference for programmatic control
+  const mapRef = useRef(null)
 
   useEffect(() => {
     checkUser()
@@ -86,6 +102,13 @@ export default function Home() {
       fetchAllUsers()
     }
   }, [isSignedIn])
+
+  // Calculate distance when from/to devices change
+  useEffect(() => {
+    if (distanceFrom && distanceTo && distanceFrom !== distanceTo) {
+      calculateDistanceBetweenDevices()
+    }
+  }, [distanceFrom, distanceTo, allDeviceLocations])
 
   const generateOrGetDeviceUUID = () => {
     let uuid = localStorage.getItem('deviceUUID')
@@ -204,9 +227,9 @@ export default function Home() {
           toast.error(errorMessage)
         },
         {
-          enableHighAccuracy: false, // Try with lower accuracy first
-          timeout: 15000, // Increase timeout
-          maximumAge: 300000 // Allow cached location up to 5 minutes
+          enableHighAccuracy: false,
+          timeout: 15000,
+          maximumAge: 300000
         }
       )
     } catch (error) {
@@ -227,34 +250,29 @@ export default function Home() {
         .from('devices')
         .select('*')
         .eq('device_token', deviceUUID)
-        .eq('user_id', user.id) // Also filter by user ID
+        .eq('user_id', user.id)
 
       console.log('Device query result:', existingDevices, fetchError)
 
-      // If there's an error that's NOT "no rows found", handle it
       if (fetchError && fetchError.code !== 'PGRST116') {
         console.error('Database error fetching device:', fetchError)
         toast.error('Database error: ' + fetchError.message)
         return
       }
 
-      // Check if we found any existing devices for this user+UUID combination
       if (existingDevices && existingDevices.length > 0) {
-        // Device exists and has a name - use it immediately
         const existingDevice = existingDevices[0]
         console.log('Found existing device:', existingDevice)
         
         setCurrentDevice(existingDevice)
         setIsDeviceSetupComplete(true)
-        setShowDeviceNaming(false) // Make sure naming screen is hidden
+        setShowDeviceNaming(false)
         
         toast.success(`Welcome back! Using device: ${existingDevice.device_name}`)
         
-        // Get current location and start tracking immediately
         getCurrentLocationAndDisplay(existingDevice)
         startLocationTracking()
       } else {
-        // No device found for this UUID+user - need to create one
         console.log('No existing device found, showing naming screen')
         setShowDeviceNaming(true)
         setIsDeviceSetupComplete(false)
@@ -279,7 +297,7 @@ export default function Home() {
         .insert({
           user_id: user.id,
           device_name: deviceName.trim(),
-          device_type: 'mobile', // Default to mobile
+          device_type: 'mobile',
           device_token: deviceUUID,
           is_online: true
         })
@@ -294,17 +312,13 @@ export default function Home() {
 
       console.log('Device saved successfully:', data)
 
-      // Set the device and complete setup immediately
       setCurrentDevice(data)
       setIsDeviceSetupComplete(true)
-      setShowDeviceNaming(false) // Hide naming screen
+      setShowDeviceNaming(false)
       
       toast.success(`Device "${deviceName}" registered successfully!`)
       
-      // Get current location and show on map immediately
       getCurrentLocationAndDisplay(data)
-      
-      // Start continuous tracking
       startLocationTracking()
     } catch (error) {
       console.error('Unexpected error saving device:', error)
@@ -334,16 +348,14 @@ export default function Home() {
 
         console.log('Sending location data:', locationData)
 
-        // Send location update via WebSocket immediately
         socket.emit('location-update', locationData)
 
-        // Also add to local state immediately for instant display
         const deviceLocationData = {
           device_id: device.id,
           device_name: device.device_name,
           device_type: device.device_type,
           is_online: true,
-          username: user.email, // temporary until we get full user data
+          username: user.email,
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
           accuracy: position.coords.accuracy,
@@ -360,7 +372,6 @@ export default function Home() {
           return newList
         })
 
-        // Update device status
         await updateDeviceStatus(true)
         
         toast.success(`📍 Location updated! Your device "${device.device_name}" is now visible on the map.`)
@@ -372,7 +383,7 @@ export default function Home() {
       {
         enableHighAccuracy: true,
         timeout: 10000,
-        maximumAge: 0 // Force fresh location
+        maximumAge: 0
       }
     )
   }
@@ -395,18 +406,16 @@ export default function Home() {
           timestamp: new Date().toISOString()
         }
 
-        // Calculate movement if we have a previous position
         if (lastPosition) {
           const distance = calculateDistance(
             lastPosition.latitude, lastPosition.longitude,
             newPosition.latitude, newPosition.longitude
           )
-          const timeDiff = (currentTime - lastPosition.timestamp) / 1000 // seconds
-          const calculatedSpeed = timeDiff > 0 ? (distance / timeDiff) * 3.6 : 0 // km/h
+          const timeDiff = (currentTime - lastPosition.timestamp) / 1000
+          const calculatedSpeed = timeDiff > 0 ? (distance / timeDiff) * 3.6 : 0
 
           setMovementSpeed(calculatedSpeed)
           
-          // Check if moving fast (>50 km/h)
           const isFast = calculatedSpeed > 50
           if (isFast !== isMovingFast) {
             setIsMovingFast(isFast)
@@ -421,15 +430,12 @@ export default function Home() {
           timestamp: currentTime
         })
 
-        // Send location update via WebSocket
         const locationData = {
           deviceId: currentDevice.id,
           ...newPosition
         }
 
         socket.emit('location-update', locationData)
-
-        // Update device online status
         updateDeviceStatus(true)
       },
       (error) => {
@@ -465,7 +471,6 @@ export default function Home() {
         console.error('Error updating device status:', error)
       }
 
-      // Emit status via WebSocket
       socket.emit('device-status', {
         deviceId: currentDevice.id,
         isOnline: isOnlineStatus && isOnline,
@@ -477,7 +482,6 @@ export default function Home() {
   }
 
   const getBatteryLevel = () => {
-    // Try to get battery level if available
     if ('getBattery' in navigator) {
       navigator.getBattery().then(battery => {
         return Math.round(battery.level * 100)
@@ -487,7 +491,7 @@ export default function Home() {
   }
 
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
-    const R = 6371e3 // Earth's radius in meters
+    const R = 6371e3
     const φ1 = lat1 * Math.PI/180
     const φ2 = lat2 * Math.PI/180
     const Δφ = (lat2-lat1) * Math.PI/180
@@ -498,14 +502,58 @@ export default function Home() {
               Math.sin(Δλ/2) * Math.sin(Δλ/2)
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
 
-    return R * c // Distance in meters
+    return R * c
+  }
+
+  // New function to calculate distance between two devices
+  const calculateDistanceBetweenDevices = () => {
+    const fromDevice = allDeviceLocations.find(d => d.device_id === distanceFrom)
+    const toDevice = allDeviceLocations.find(d => d.device_id === distanceTo)
+    
+    if (fromDevice && toDevice) {
+      const distance = calculateDistance(
+        fromDevice.latitude, fromDevice.longitude,
+        toDevice.latitude, toDevice.longitude
+      )
+      setCalculatedDistance(distance)
+    } else {
+      setCalculatedDistance(null)
+    }
+  }
+
+  // New function to zoom to specific device
+  const zoomToDevice = (deviceId) => {
+    const device = allDeviceLocations.find(d => d.device_id === deviceId)
+    if (device && mapRef.current) {
+      // This would need to be implemented in the MapComponent
+      // For now, we'll set selected device and let MapComponent handle it
+      setSelectedDevice(device)
+      toast.success(`Zoomed to ${device.device_name}`)
+    }
+  }
+
+  // Format distance for display
+  const formatDistance = (distance) => {
+    if (distance < 1000) {
+      return `${Math.round(distance)} m`
+    } else if (distance < 100000) {
+      return `${(distance / 1000).toFixed(1)} km`
+    } else {
+      return `${Math.round(distance / 1000)} km`
+    }
+  }
+
+  // Reverse distance calculation
+  const reverseDistanceSelection = () => {
+    const temp = distanceFrom
+    setDistanceFrom(distanceTo)
+    setDistanceTo(temp)
   }
 
   const fetchAllDeviceLocations = async () => {
     try {
       console.log('Fetching all device locations...')
       
-      // Try fetching from the view first
       let { data, error } = await supabase
         .from('current_device_locations')
         .select('*')
@@ -513,7 +561,6 @@ export default function Home() {
       if (error) {
         console.error('Error with view, trying direct query:', error)
         
-        // If view fails, try direct query
         const { data: locations, error: locError } = await supabase
           .from('location_history')
           .select(`
@@ -534,7 +581,6 @@ export default function Home() {
           return
         }
 
-        // Transform the data to match expected format
         data = locations.map(loc => ({
           device_id: loc.device_id,
           device_name: loc.devices.device_name,
@@ -545,7 +591,7 @@ export default function Home() {
           accuracy: loc.accuracy,
           speed: loc.speed,
           timestamp: loc.timestamp,
-          username: 'Unknown' // We'll get this later
+          username: 'Unknown'
         }))
       }
 
@@ -553,7 +599,7 @@ export default function Home() {
       setAllDeviceLocations(data || [])
     } catch (error) {
       console.error('Error fetching device locations:', error)
-      setAllDeviceLocations([]) // Set empty array as fallback
+      setAllDeviceLocations([])
     }
   }
 
@@ -751,6 +797,23 @@ export default function Home() {
               )}
             </div>
             <div className="flex items-center space-x-4">
+              {/* New control buttons */}
+              <button
+                onClick={() => setShowDevicesList(!showDevicesList)}
+                className={`p-2 rounded-md ${showDevicesList ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'} hover:bg-blue-200`}
+                title="Toggle Devices List"
+              >
+                <ListBulletIcon className="w-5 h-5" />
+              </button>
+              
+              <button
+                onClick={() => setShowDistanceCalculator(!showDistanceCalculator)}
+                className={`p-2 rounded-md ${showDistanceCalculator ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'} hover:bg-green-200`}
+                title="Distance Calculator"
+              >
+                <CalculatorIcon className="w-5 h-5" />
+              </button>
+
               {/* Status indicators */}
               <div className="flex items-center space-x-2">
                 {!isOnline && (
@@ -810,99 +873,280 @@ export default function Home() {
         </div>
       )}
 
-      {/* Navigation Tabs */}
-      <div className="bg-white border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <nav className="flex space-x-8">
-            {['map', 'users'].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setCurrentTab(tab)}
-                className={`py-4 px-1 border-b-2 font-medium text-sm capitalize ${
-                  currentTab === tab
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {tab === 'map' && <MapPinIcon className="w-5 h-5 inline mr-1" />}
-                {tab === 'users' && <UserGroupIcon className="w-5 h-5 inline mr-1" />}
-                {tab}
-              </button>
-            ))}
-          </nav>
-        </div>
-      </div>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Map Tab */}
-        {currentTab === 'map' && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-semibold">Live GPS Tracking</h2>
-              <div className="text-sm text-gray-600">
-                {allDeviceLocations.length} devices online
-              </div>
+      <div className="flex">
+        {/* Sidebar - Devices List */}
+        {showDevicesList && (
+          <div className="w-80 bg-white border-r shadow-sm">
+            <div className="p-4 border-b">
+              <h3 className="text-lg font-medium text-gray-900">Connected Devices</h3>
+              <p className="text-sm text-gray-500">{allDeviceLocations.length} devices online</p>
             </div>
-            <MapComponent 
-              devices={allDeviceLocations} 
-              height="500px"
-              showAllDevices={true}
-            />
+            <div className="divide-y divide-gray-200 max-h-96 overflow-y-auto">
+              {allDeviceLocations.map((device) => {
+                const timeDiff = (new Date() - new Date(device.timestamp)) / 1000 / 60
+                const isRecent = timeDiff < 5
+                const isStale = timeDiff >= 5 && timeDiff < 30
+                
+                return (
+                  <div
+                    key={device.device_id}
+                    className="p-4 hover:bg-gray-50 cursor-pointer"
+                    onClick={() => zoomToDevice(device.device_id)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className={`w-3 h-3 rounded-full ${
+                          device.is_online && isRecent ? 'bg-green-500' :
+                          device.is_online && isStale ? 'bg-yellow-500' : 'bg-red-500'
+                        }`}></div>
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">
+                            {device.device_name}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {device.username} • {device.device_type}
+                          </p>
+                        </div>
+                      </div>
+                      <button className="p-1 hover:bg-gray-200 rounded">
+                        <EyeIcon className="w-4 h-4 text-gray-400" />
+                      </button>
+                    </div>
+                    
+                    <div className="mt-2 text-xs text-gray-500">
+                      <div>Last seen: {timeDiff < 1 ? 'Just now' : 
+                                      timeDiff < 60 ? `${Math.round(timeDiff)}m ago` :
+                                      timeDiff < 1440 ? `${Math.round(timeDiff/60)}h ago` :
+                                      `${Math.round(timeDiff/1440)}d ago`}</div>
+                      
+                      {device.speed && device.speed > 0 && (
+                        <div>Speed: {Math.round(device.speed * 10) / 10} km/h</div>
+                      )}
+                      
+                      <div className="truncate">
+                        📍 {parseFloat(device.latitude).toFixed(4)}, {parseFloat(device.longitude).toFixed(4)}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+              
+              {allDeviceLocations.length === 0 && (
+                <div className="p-8 text-center text-gray-500">
+                  <DevicePhoneMobileIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p>No devices online</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {/* Users Tab */}
-        {currentTab === 'users' && (
-          <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-semibold">All Users</h2>
-              <div className="relative">
-                <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type="text"
-                  placeholder="Search users..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+        {/* Distance Calculator Sidebar */}
+        {showDistanceCalculator && (
+          <div className="w-80 bg-white border-r shadow-sm">
+            <div className="p-4 border-b">
+              <h3 className="text-lg font-medium text-gray-900">Distance Calculator</h3>
+              <p className="text-sm text-gray-500">Calculate distance between devices</p>
             </div>
+            
+            <div className="p-4 space-y-4">
+              {/* From Device */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">From Device</label>
+                <select
+                  value={distanceFrom}
+                  onChange={(e) => setDistanceFrom(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select device...</option>
+                  {allDeviceLocations.map(device => (
+                    <option key={device.device_id} value={device.device_id}>
+                      {device.device_name} ({device.username})
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            {/* Users Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredUsers.map((user) => (
-                <div key={user.id} className="bg-white p-6 rounded-lg shadow-md border">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center">
-                      <span className="text-white font-medium">
-                        {user.username?.charAt(0)?.toUpperCase() || '?'}
-                      </span>
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-lg font-medium">{user.username}</h3>
-                      {user.full_name && (
-                        <p className="text-sm text-gray-600">{user.full_name}</p>
-                      )}
-                    </div>
+              {/* Reverse Button */}
+              <div className="flex justify-center">
+                <button
+                  onClick={reverseDistanceSelection}
+                  disabled={!distanceFrom || !distanceTo}
+                  className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Reverse selection"
+                >
+                  <ArrowsRightLeftIcon className="w-4 h-4 text-gray-600" />
+                </button>
+              </div>
+
+              {/* To Device */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">To Device</label>
+                <select
+                  value={distanceTo}
+                  onChange={(e) => setDistanceTo(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select device...</option>
+                  {allDeviceLocations.map(device => (
+                    <option key={device.device_id} value={device.device_id}>
+                      {device.device_name} ({device.username})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Distance Result */}
+              {calculatedDistance !== null && distanceFrom && distanceTo && distanceFrom !== distanceTo && (
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="text-sm font-medium text-blue-900 mb-1">Distance</div>
+                  <div className="text-2xl font-bold text-blue-600">
+                    {formatDistance(calculatedDistance)}
                   </div>
                   
-                  <div className="mt-4 text-xs text-gray-500">
-                    Joined {format(new Date(user.created_at), 'MMM yyyy')}
+                  {/* Additional info */}
+                  <div className="mt-2 text-xs text-blue-700 space-y-1">
+                    <div>As the crow flies</div>
+                    {calculatedDistance > 100000 && (
+                      <div>Long distance - consider flight time</div>
+                    )}
+                    {calculatedDistance < 100 && (
+                      <div>Very close proximity</div>
+                    )}
                   </div>
                 </div>
-              ))}
-            </div>
+              )}
 
-            {filteredUsers.length === 0 && (
-              <div className="text-center py-12">
-                <UserGroupIcon className="mx-auto h-12 w-12 text-gray-400" />
-                <h3 className="mt-2 text-sm font-medium text-gray-900">No users found</h3>
-                <p className="mt-1 text-sm text-gray-500">Try adjusting your search terms.</p>
-              </div>
-            )}
+              {/* Show selected devices info */}
+              {distanceFrom && distanceTo && distanceFrom === distanceTo && (
+                <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                  <p className="text-sm text-yellow-800">Please select two different devices</p>
+                </div>
+              )}
+
+              {/* Quick actions */}
+              {calculatedDistance !== null && distanceFrom && distanceTo && distanceFrom !== distanceTo && (
+                <div className="mt-4 space-y-2">
+                  <button
+                    onClick={() => {
+                      // Focus both devices on map
+                      const fromDevice = allDeviceLocations.find(d => d.device_id === distanceFrom)
+                      const toDevice = allDeviceLocations.find(d => d.device_id === distanceTo)
+                      if (fromDevice && toDevice) {
+                        // This would need MapComponent enhancement to show both devices
+                        toast.success(`Showing ${fromDevice.device_name} and ${toDevice.device_name} on map`)
+                      }
+                    }}
+                    className="w-full bg-blue-600 text-white py-2 px-4 rounded-md text-sm hover:bg-blue-700"
+                  >
+                    Show Both on Map
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
-      </main>
+
+        {/* Main Content Area */}
+        <div className="flex-1">
+          {/* Navigation Tabs */}
+          <div className="bg-white border-b">
+            <div className="px-6">
+              <nav className="flex space-x-8">
+                {['map', 'users'].map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setCurrentTab(tab)}
+                    className={`py-4 px-1 border-b-2 font-medium text-sm capitalize ${
+                      currentTab === tab
+                        ? 'border-blue-500 text-blue-600'
+                        : 'border-transparent text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {tab === 'map' && <MapPinIcon className="w-5 h-5 inline mr-1" />}
+                    {tab === 'users' && <UserGroupIcon className="w-5 h-5 inline mr-1" />}
+                    {tab}
+                  </button>
+                ))}
+              </nav>
+            </div>
+          </div>
+
+          <main className="p-6">
+            {/* Map Tab */}
+            {currentTab === 'map' && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-semibold">Live GPS Tracking</h2>
+                  <div className="text-sm text-gray-600">
+                    {allDeviceLocations.length} devices online
+                  </div>
+                </div>
+                <MapComponent 
+                  ref={mapRef}
+                  devices={allDeviceLocations} 
+                  height="500px"
+                  showAllDevices={true}
+                  selectedDevice={selectedDevice}
+                  onDeviceSelect={setSelectedDevice}
+                />
+              </div>
+            )}
+
+            {/* Users Tab */}
+            {currentTab === 'users' && (
+              <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-xl font-semibold">All Users</h2>
+                  <div className="relative">
+                    <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search users..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Users Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredUsers.map((user) => (
+                    <div key={user.id} className="bg-white p-6 rounded-lg shadow-md border">
+                      <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center">
+                          <span className="text-white font-medium">
+                            {user.username?.charAt(0)?.toUpperCase() || '?'}
+                          </span>
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="text-lg font-medium">{user.username}</h3>
+                          {user.full_name && (
+                            <p className="text-sm text-gray-600">{user.full_name}</p>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="mt-4 text-xs text-gray-500">
+                        Joined {format(new Date(user.created_at), 'MMM yyyy')}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {filteredUsers.length === 0 && (
+                  <div className="text-center py-12">
+                    <UserGroupIcon className="mx-auto h-12 w-12 text-gray-400" />
+                    <h3 className="mt-2 text-sm font-medium text-gray-900">No users found</h3>
+                    <p className="mt-1 text-sm text-gray-500">Try adjusting your search terms.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </main>
+        </div>
+      </div>
     </div>
   )
 }
