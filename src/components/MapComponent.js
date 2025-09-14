@@ -55,9 +55,60 @@ const MapComponent = forwardRef(({
         validDevices.forEach(device => {
           bounds.extend([parseFloat(device.latitude), parseFloat(device.longitude)])
         })
+        
+        // Calculate distance between devices to determine optimal zoom
+        const device1 = validDevices[0]
+        const device2 = validDevices[1]
+        const lat1 = parseFloat(device1.latitude)
+        const lng1 = parseFloat(device1.longitude)
+        const lat2 = parseFloat(device2.latitude)
+        const lng2 = parseFloat(device2.longitude)
+        
+        // Calculate distance using Haversine formula
+        const R = 6371e3 // Earth's radius in meters
+        const φ1 = lat1 * Math.PI/180
+        const φ2 = lat2 * Math.PI/180
+        const Δφ = (lat2-lat1) * Math.PI/180
+        const Δλ = (lng2-lng1) * Math.PI/180
+
+        const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                  Math.cos(φ1) * Math.cos(φ2) *
+                  Math.sin(Δλ/2) * Math.sin(Δλ/2)
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+        const distance = R * c // Distance in meters
+        
+        // Determine zoom level and padding based on distance
+        let maxZoom, padding
+        
+        if (distance < 50) {
+          // Very close devices - high zoom with minimal padding
+          maxZoom = 18
+          padding = [10, 10]
+        } else if (distance < 200) {
+          // Close devices - medium-high zoom
+          maxZoom = 17
+          padding = [15, 15]
+        } else if (distance < 1000) {
+          // Nearby devices - medium zoom
+          maxZoom = 15
+          padding = [20, 20]
+        } else if (distance < 5000) {
+          // Moderate distance - lower zoom
+          maxZoom = 13
+          padding = [30, 30]
+        } else if (distance < 25000) {
+          // Far devices - city level zoom
+          maxZoom = 11
+          padding = [40, 40]
+        } else {
+          // Very far devices - regional zoom
+          maxZoom = 9
+          padding = [50, 50]
+        }
+        
         mapInstanceRef.current.fitBounds(bounds, { 
-          padding: [20, 20],
-          maxZoom: 16
+          padding: padding,
+          maxZoom: maxZoom
         })
       }
     }

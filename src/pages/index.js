@@ -18,7 +18,8 @@ import {
   ArrowsRightLeftIcon,
   EyeIcon,
   ListBulletIcon,
-  CalculatorIcon
+  CalculatorIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline'
 
 // Dynamically import Map component to avoid SSR issues
@@ -61,10 +62,9 @@ export default function Home() {
   const [currentTab, setCurrentTab] = useState('map')
   const [searchTerm, setSearchTerm] = useState('')
   
-  // New states for enhanced features
-  const [showDevicesList, setShowDevicesList] = useState(false)
+  // Enhanced states for mobile responsiveness
+  const [activeSidebar, setActiveSidebar] = useState(null) // 'devices' | 'distance' | null
   const [selectedDevice, setSelectedDevice] = useState(null)
-  const [showDistanceCalculator, setShowDistanceCalculator] = useState(false)
   const [distanceFrom, setDistanceFrom] = useState('')
   const [distanceTo, setDistanceTo] = useState('')
   const [calculatedDistance, setCalculatedDistance] = useState(null)
@@ -109,6 +109,15 @@ export default function Home() {
       calculateDistanceBetweenDevices()
     }
   }, [distanceFrom, distanceTo, allDeviceLocations])
+
+  // Mobile responsive sidebar handler
+  const toggleSidebar = (sidebarType) => {
+    if (activeSidebar === sidebarType) {
+      setActiveSidebar(null)
+    } else {
+      setActiveSidebar(sidebarType)
+    }
+  }
 
   const generateOrGetDeviceUUID = () => {
     let uuid = localStorage.getItem('deviceUUID')
@@ -374,7 +383,7 @@ export default function Home() {
 
         await updateDeviceStatus(true)
         
-        toast.success(`📍 Location updated! Your device "${device.device_name}" is now visible on the map.`)
+        toast.success(`Location updated! Your device "${device.device_name}" is now visible on the map.`)
       },
       (error) => {
         console.error('Error getting initial location:', error)
@@ -420,7 +429,7 @@ export default function Home() {
           if (isFast !== isMovingFast) {
             setIsMovingFast(isFast)
             if (isFast) {
-              toast(`🚗 Moving fast: ${Math.round(calculatedSpeed)} km/h`, { icon: '⚡' })
+              toast(`Moving fast: ${Math.round(calculatedSpeed)} km/h`, { icon: '⚡' })
             }
           }
         }
@@ -525,9 +534,9 @@ export default function Home() {
   const zoomToDevice = (deviceId) => {
     const device = allDeviceLocations.find(d => d.device_id === deviceId)
     if (device && mapRef.current) {
-      // This would need to be implemented in the MapComponent
-      // For now, we'll set selected device and let MapComponent handle it
       setSelectedDevice(device)
+      // Close sidebar on mobile after selecting device
+      setActiveSidebar(null)
       toast.success(`Zoomed to ${device.device_name}`)
     }
   }
@@ -684,10 +693,10 @@ export default function Home() {
 
   if (!isSignedIn) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow-md">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <div className="max-w-md w-full space-y-8 p-6 sm:p-8 bg-white rounded-lg shadow-md">
           <div>
-            <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+            <h2 className="mt-6 text-center text-2xl sm:text-3xl font-extrabold text-gray-900">
               GPS Tracker
             </h2>
             <p className="mt-2 text-center text-sm text-gray-600">
@@ -742,11 +751,11 @@ export default function Home() {
   // Device naming screen
   if (showDeviceNaming) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="max-w-md w-full space-y-8 p-8 bg-white rounded-lg shadow-md">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <div className="max-w-md w-full space-y-8 p-6 sm:p-8 bg-white rounded-lg shadow-md">
           <div>
             <DevicePhoneMobileIcon className="mx-auto h-12 w-12 text-blue-600" />
-            <h2 className="mt-6 text-center text-2xl font-extrabold text-gray-900">
+            <h2 className="mt-6 text-center text-xl sm:text-2xl font-extrabold text-gray-900">
               Name Your Device
             </h2>
             <p className="mt-2 text-center text-sm text-gray-600">
@@ -782,77 +791,82 @@ export default function Home() {
     <div className="min-h-screen bg-gray-50">
       <Toaster position="top-right" />
       
-      {/* Header */}
+      {/* Header - Mobile Responsive */}
       <header className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
           <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-4">
-              <h1 className="text-2xl font-bold text-gray-900">GPS Tracker</h1>
+            <div className="flex items-center space-x-2 sm:space-x-4">
+              <h1 className="text-lg sm:text-2xl font-bold text-gray-900">GPS Tracker</h1>
               {currentDevice && (
-                <div className="flex items-center space-x-2 text-sm">
+                <div className="hidden sm:flex items-center space-x-2 text-sm">
                   <DevicePhoneMobileIcon className="w-4 h-4 text-gray-500" />
                   <span className="text-gray-600">{currentDevice.device_name}</span>
                   <div className={`w-3 h-3 rounded-full ${isOnline && locationStatus === 'granted' ? 'bg-green-500' : 'bg-red-500'}`}></div>
                 </div>
               )}
             </div>
-            <div className="flex items-center space-x-4">
-              {/* New control buttons */}
+            
+            <div className="flex items-center space-x-1 sm:space-x-4">
+              {/* Mobile responsive control buttons */}
               <button
-                onClick={() => setShowDevicesList(!showDevicesList)}
-                className={`p-2 rounded-md ${showDevicesList ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'} hover:bg-blue-200`}
+                onClick={() => toggleSidebar('devices')}
+                className={`p-2 rounded-md ${activeSidebar === 'devices' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'} hover:bg-blue-200`}
                 title="Toggle Devices List"
               >
-                <ListBulletIcon className="w-5 h-5" />
+                <ListBulletIcon className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
               
               <button
-                onClick={() => setShowDistanceCalculator(!showDistanceCalculator)}
-                className={`p-2 rounded-md ${showDistanceCalculator ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'} hover:bg-green-200`}
+                onClick={() => toggleSidebar('distance')}
+                className={`p-2 rounded-md ${activeSidebar === 'distance' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'} hover:bg-green-200`}
                 title="Distance Calculator"
               >
-                <CalculatorIcon className="w-5 h-5" />
+                <CalculatorIcon className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
 
-              {/* Status indicators */}
-              <div className="flex items-center space-x-2">
+              {/* Status indicators - hidden on very small screens */}
+              <div className="hidden sm:flex items-center space-x-2">
                 {!isOnline && (
                   <div className="flex items-center text-red-600 text-sm">
                     <ExclamationTriangleIcon className="w-4 h-4 mr-1" />
-                    Offline
+                    <span className="hidden lg:inline">Offline</span>
                   </div>
                 )}
                 {locationStatus === 'denied' && isOnline && (
                   <div className="flex items-center text-orange-600 text-sm">
                     <ExclamationTriangleIcon className="w-4 h-4 mr-1" />
-                    No Location
+                    <span className="hidden lg:inline">No Location</span>
                   </div>
                 )}
                 {isMovingFast && (
                   <div className="flex items-center text-blue-600 text-sm">
-                    ⚡ {Math.round(movementSpeed)} km/h
+                    ⚡ <span className="hidden lg:inline">{Math.round(movementSpeed)} km/h</span>
                   </div>
                 )}
-              </div>
-              <span className="text-sm text-gray-600">{user?.email}</span>
+                </div>
+              
+              <span className="hidden sm:inline text-xs sm:text-sm text-gray-600 truncate max-w-20 sm:max-w-none">
+                {user?.email}
+              </span>
               <button
                 onClick={handleSignOut}
-                className="bg-red-600 text-white px-4 py-2 rounded-md text-sm hover:bg-red-700"
+                className="bg-red-600 text-white px-2 sm:px-4 py-2 rounded-md text-xs sm:text-sm hover:bg-red-700"
               >
-                Sign Out
+                <span className="hidden sm:inline">Sign Out</span>
+                <span className="sm:hidden">Out</span>
               </button>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Location permission request */}
+      {/* Location permission request - Mobile Responsive */}
       {locationStatus === 'denied' && isOnline && (
         <div className="bg-orange-50 border-b border-orange-200">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between space-y-3 sm:space-y-0">
               <div className="flex items-center">
-                <ExclamationTriangleIcon className="h-5 w-5 text-orange-400 mr-3" />
+                <ExclamationTriangleIcon className="h-5 w-5 text-orange-400 mr-3 flex-shrink-0" />
                 <div>
                   <p className="text-sm font-medium text-orange-800">
                     Location access is required for tracking
@@ -864,7 +878,7 @@ export default function Home() {
               </div>
               <button
                 onClick={requestLocationPermission}
-                className="bg-orange-600 text-white px-4 py-2 rounded-md text-sm hover:bg-orange-700"
+                className="bg-orange-600 text-white px-4 py-2 rounded-md text-sm hover:bg-orange-700 w-full sm:w-auto"
               >
                 Retry
               </button>
@@ -873,219 +887,264 @@ export default function Home() {
         </div>
       )}
 
-      <div className="flex">
-        {/* Sidebar - Devices List */}
-        {showDevicesList && (
-          <div className="w-80 bg-white border-r shadow-sm">
-            <div className="p-4 border-b">
-              <h3 className="text-lg font-medium text-gray-900">Connected Devices</h3>
-              <p className="text-sm text-gray-500">{allDeviceLocations.length} devices online</p>
+      <div className="flex relative">
+        {/* Mobile Responsive Sidebar - Only one can be active */}
+        {activeSidebar && (
+          <div className={`
+            ${activeSidebar ? 'block' : 'hidden'}
+            w-full sm:w-80 bg-white border-r shadow-sm
+            absolute sm:relative z-20 h-screen sm:h-auto
+          `}>
+            {/* Sidebar Header with Close Button */}
+            <div className="p-4 border-b flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900">
+                  {activeSidebar === 'devices' ? 'Connected Devices' : 'Distance Calculator'}
+                </h3>
+                <p className="text-sm text-gray-500">
+                  {activeSidebar === 'devices' ? 
+                    `${allDeviceLocations.length} devices online` : 
+                    'Calculate distance between devices'
+                  }
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveSidebar(null)}
+                className="p-2 hover:bg-gray-100 rounded-md sm:hidden"
+              >
+                <XMarkIcon className="w-5 h-5 text-gray-500" />
+              </button>
             </div>
-            <div className="divide-y divide-gray-200 max-h-96 overflow-y-auto">
-              {allDeviceLocations.map((device) => {
-                const timeDiff = (new Date() - new Date(device.timestamp)) / 1000 / 60
-                const isRecent = timeDiff < 5
-                const isStale = timeDiff >= 5 && timeDiff < 30
-                
-                return (
-                  <div
-                    key={device.device_id}
-                    className="p-4 hover:bg-gray-50 cursor-pointer"
-                    onClick={() => zoomToDevice(device.device_id)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className={`w-3 h-3 rounded-full ${
-                          device.is_online && isRecent ? 'bg-green-500' :
-                          device.is_online && isStale ? 'bg-yellow-500' : 'bg-red-500'
-                        }`}></div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {device.device_name}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {device.username} • {device.device_type}
-                          </p>
+
+            {/* Devices List Content */}
+            {activeSidebar === 'devices' && (
+              <div className="divide-y divide-gray-200 max-h-screen sm:max-h-96 overflow-y-auto">
+                {allDeviceLocations.map((device) => {
+                  const timeDiff = (new Date() - new Date(device.timestamp)) / 1000 / 60
+                  const isRecent = timeDiff < 5
+                  const isStale = timeDiff >= 5 && timeDiff < 30
+                  
+                  return (
+                    <div
+                      key={device.device_id}
+                      className="p-4 hover:bg-gray-50 cursor-pointer"
+                      onClick={() => zoomToDevice(device.device_id)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-3 h-3 rounded-full ${
+                            device.is_online && isRecent ? 'bg-green-500' :
+                            device.is_online && isStale ? 'bg-yellow-500' : 'bg-red-500'
+                          }`}></div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {device.device_name}
+                            </p>
+                            <p className="text-xs text-gray-500 truncate">
+                              {device.username} • {device.device_type}
+                            </p>
+                          </div>
+                        </div>
+                        <button className="p-1 hover:bg-gray-200 rounded flex-shrink-0">
+                          <EyeIcon className="w-4 h-4 text-gray-400" />
+                        </button>
+                      </div>
+                      
+                      <div className="mt-2 text-xs text-gray-500 space-y-1">
+                        <div>Last seen: {timeDiff < 1 ? 'Just now' : 
+                                        timeDiff < 60 ? `${Math.round(timeDiff)}m ago` :
+                                        timeDiff < 1440 ? `${Math.round(timeDiff/60)}h ago` :
+                                        `${Math.round(timeDiff/1440)}d ago`}</div>
+                        
+                        {device.speed && device.speed > 0 && (
+                          <div>Speed: {Math.round(device.speed * 10) / 10} km/h</div>
+                        )}
+                        
+                        <div className="truncate">
+                          📍 {parseFloat(device.latitude).toFixed(4)}, {parseFloat(device.longitude).toFixed(4)}
                         </div>
                       </div>
-                      <button className="p-1 hover:bg-gray-200 rounded">
-                        <EyeIcon className="w-4 h-4 text-gray-400" />
-                      </button>
+                    </div>
+                  )
+                })}
+                
+                {allDeviceLocations.length === 0 && (
+                  <div className="p-8 text-center text-gray-500">
+                    <DevicePhoneMobileIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                    <p>No devices online</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Distance Calculator Content */}
+            {activeSidebar === 'distance' && (
+              <div className="p-4 space-y-4 max-h-screen overflow-y-auto">
+                {/* From Device */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">From Device</label>
+                  <select
+                    value={distanceFrom}
+                    onChange={(e) => setDistanceFrom(e.target.value)}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select device...</option>
+                    {allDeviceLocations.map(device => (
+                      <option key={device.device_id} value={device.device_id}>
+                        {device.device_name} ({device.username})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Reverse Button */}
+                <div className="flex justify-center">
+                  <button
+                    onClick={reverseDistanceSelection}
+                    disabled={!distanceFrom || !distanceTo}
+                    className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Reverse selection"
+                  >
+                    <ArrowsRightLeftIcon className="w-4 h-4 text-gray-600" />
+                  </button>
+                </div>
+
+                {/* To Device */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">To Device</label>
+                  <select
+                    value={distanceTo}
+                    onChange={(e) => setDistanceTo(e.target.value)}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select device...</option>
+                    {allDeviceLocations.map(device => (
+                      <option key={device.device_id} value={device.device_id}>
+                        {device.device_name} ({device.username})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Distance Result */}
+                {calculatedDistance !== null && distanceFrom && distanceTo && distanceFrom !== distanceTo && (
+                  <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="text-sm font-medium text-blue-900 mb-1">Distance</div>
+                    <div className="text-2xl font-bold text-blue-600">
+                      {formatDistance(calculatedDistance)}
                     </div>
                     
-                    <div className="mt-2 text-xs text-gray-500">
-                      <div>Last seen: {timeDiff < 1 ? 'Just now' : 
-                                      timeDiff < 60 ? `${Math.round(timeDiff)}m ago` :
-                                      timeDiff < 1440 ? `${Math.round(timeDiff/60)}h ago` :
-                                      `${Math.round(timeDiff/1440)}d ago`}</div>
-                      
-                      {device.speed && device.speed > 0 && (
-                        <div>Speed: {Math.round(device.speed * 10) / 10} km/h</div>
+                    {/* Additional info */}
+                    <div className="mt-2 text-xs text-blue-700 space-y-1">
+                      <div>As the crow flies</div>
+                      {calculatedDistance > 100000 && (
+                        <div>Long distance - consider flight time</div>
                       )}
-                      
-                      <div className="truncate">
-                        📍 {parseFloat(device.latitude).toFixed(4)}, {parseFloat(device.longitude).toFixed(4)}
-                      </div>
+                      {calculatedDistance < 100 && (
+                        <div>Very close proximity</div>
+                      )}
                     </div>
                   </div>
-                )
-              })}
-              
-              {allDeviceLocations.length === 0 && (
-                <div className="p-8 text-center text-gray-500">
-                  <DevicePhoneMobileIcon className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                  <p>No devices online</p>
-                </div>
-              )}
-            </div>
+                )}
+
+                {/* Show selected devices info */}
+                {distanceFrom && distanceTo && distanceFrom === distanceTo && (
+                  <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                    <p className="text-sm text-yellow-800">Please select two different devices</p>
+                  </div>
+                )}
+
+                {/* Quick actions */}
+                {calculatedDistance !== null && distanceFrom && distanceTo && distanceFrom !== distanceTo && (
+                  <div className="mt-4 space-y-2">
+                    <button
+                      onClick={() => {
+                        const fromDevice = allDeviceLocations.find(d => d.device_id === distanceFrom)
+                        const toDevice = allDeviceLocations.find(d => d.device_id === distanceTo)
+                        
+                        if (fromDevice && toDevice && mapRef.current) {
+                          // Use the map's fitBounds method to show both devices
+                          mapRef.current.fitBounds([distanceFrom, distanceTo])
+                          
+                          // Also clear any single device selection to show both
+                          setSelectedDevice(null)
+                          
+                          // Close sidebar on mobile after action
+                          setActiveSidebar(null)
+                          
+                          // Determine zoom level message based on distance
+                          let zoomMessage = ''
+                          if (calculatedDistance < 100) {
+                            zoomMessage = 'Zooming in - devices are very close'
+                          } else if (calculatedDistance < 1000) {
+                            zoomMessage = 'Adjusting zoom for nearby devices'
+                          } else if (calculatedDistance < 10000) {
+                            zoomMessage = 'Zooming out to show both devices'
+                          } else {
+                            zoomMessage = 'Wide view - devices are far apart'
+                          }
+                          
+                          toast.success(`${zoomMessage}: ${fromDevice.device_name} and ${toDevice.device_name}`)
+                        }
+                      }}
+                      className="w-full bg-blue-600 text-white py-2 px-4 rounded-md text-sm hover:bg-blue-700"
+                    >
+                      Show Both on Map
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
 
-        {/* Distance Calculator Sidebar */}
-        {showDistanceCalculator && (
-          <div className="w-80 bg-white border-r shadow-sm">
-            <div className="p-4 border-b">
-              <h3 className="text-lg font-medium text-gray-900">Distance Calculator</h3>
-              <p className="text-sm text-gray-500">Calculate distance between devices</p>
-            </div>
-            
-            <div className="p-4 space-y-4">
-              {/* From Device */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">From Device</label>
-                <select
-                  value={distanceFrom}
-                  onChange={(e) => setDistanceFrom(e.target.value)}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select device...</option>
-                  {allDeviceLocations.map(device => (
-                    <option key={device.device_id} value={device.device_id}>
-                      {device.device_name} ({device.username})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Reverse Button */}
-              <div className="flex justify-center">
-                <button
-                  onClick={reverseDistanceSelection}
-                  disabled={!distanceFrom || !distanceTo}
-                  className="p-2 rounded-full bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Reverse selection"
-                >
-                  <ArrowsRightLeftIcon className="w-4 h-4 text-gray-600" />
-                </button>
-              </div>
-
-              {/* To Device */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">To Device</label>
-                <select
-                  value={distanceTo}
-                  onChange={(e) => setDistanceTo(e.target.value)}
-                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select device...</option>
-                  {allDeviceLocations.map(device => (
-                    <option key={device.device_id} value={device.device_id}>
-                      {device.device_name} ({device.username})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Distance Result */}
-              {calculatedDistance !== null && distanceFrom && distanceTo && distanceFrom !== distanceTo && (
-                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <div className="text-sm font-medium text-blue-900 mb-1">Distance</div>
-                  <div className="text-2xl font-bold text-blue-600">
-                    {formatDistance(calculatedDistance)}
-                  </div>
-                  
-                  {/* Additional info */}
-                  <div className="mt-2 text-xs text-blue-700 space-y-1">
-                    <div>As the crow flies</div>
-                    {calculatedDistance > 100000 && (
-                      <div>Long distance - consider flight time</div>
-                    )}
-                    {calculatedDistance < 100 && (
-                      <div>Very close proximity</div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Show selected devices info */}
-              {distanceFrom && distanceTo && distanceFrom === distanceTo && (
-                <div className="mt-4 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                  <p className="text-sm text-yellow-800">Please select two different devices</p>
-                </div>
-              )}
-
-              {/* Quick actions */}
-              {calculatedDistance !== null && distanceFrom && distanceTo && distanceFrom !== distanceTo && (
-                <div className="mt-4 space-y-2">
-                  <button
-                    onClick={() => {
-                      // Focus both devices on map
-                      const fromDevice = allDeviceLocations.find(d => d.device_id === distanceFrom)
-                      const toDevice = allDeviceLocations.find(d => d.device_id === distanceTo)
-                      if (fromDevice && toDevice) {
-                        // This would need MapComponent enhancement to show both devices
-                        toast.success(`Showing ${fromDevice.device_name} and ${toDevice.device_name} on map`)
-                      }
-                    }}
-                    className="w-full bg-blue-600 text-white py-2 px-4 rounded-md text-sm hover:bg-blue-700"
-                  >
-                    Show Both on Map
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
+        {/* Mobile Overlay */}
+        {activeSidebar && (
+          <div 
+            className="fixed inset-0 bg-black bg-opacity-50 z-10 sm:hidden"
+            onClick={() => setActiveSidebar(null)}
+          />
         )}
 
         {/* Main Content Area */}
         <div className="flex-1">
-          {/* Navigation Tabs */}
+          {/* Navigation Tabs - Mobile Responsive */}
           <div className="bg-white border-b">
-            <div className="px-6">
-              <nav className="flex space-x-8">
+            <div className="px-3 sm:px-6">
+              <nav className="flex space-x-4 sm:space-x-8">
                 {['map', 'users'].map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setCurrentTab(tab)}
-                    className={`py-4 px-1 border-b-2 font-medium text-sm capitalize ${
+                    className={`py-4 px-1 border-b-2 font-medium text-xs sm:text-sm capitalize ${
                       currentTab === tab
                         ? 'border-blue-500 text-blue-600'
                         : 'border-transparent text-gray-500 hover:text-gray-700'
                     }`}
                   >
-                    {tab === 'map' && <MapPinIcon className="w-5 h-5 inline mr-1" />}
-                    {tab === 'users' && <UserGroupIcon className="w-5 h-5 inline mr-1" />}
-                    {tab}
+                    {tab === 'map' && <MapPinIcon className="w-4 h-4 sm:w-5 sm:h-5 inline mr-1" />}
+                    {tab === 'users' && <UserGroupIcon className="w-4 h-4 sm:w-5 sm:h-5 inline mr-1" />}
+                    <span className="hidden sm:inline">{tab}</span>
                   </button>
                 ))}
               </nav>
             </div>
           </div>
 
-          <main className="p-6">
-            {/* Map Tab */}
+          <main className="p-3 sm:p-6">
+            {/* Map Tab - Mobile Responsive */}
             {currentTab === 'map' && (
-              <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-semibold">Live GPS Tracking</h2>
-                  <div className="text-sm text-gray-600">
+              <div className="space-y-4 sm:space-y-6">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-2 sm:space-y-0">
+                  <h2 className="text-lg sm:text-xl font-semibold">Live GPS Tracking</h2>
+                  <div className="text-xs sm:text-sm text-gray-600">
                     {allDeviceLocations.length} devices online
                   </div>
                 </div>
                 <MapComponent 
                   ref={mapRef}
                   devices={allDeviceLocations} 
-                  height="500px"
+                  height="400px"
                   showAllDevices={true}
                   selectedDevice={selectedDevice}
                   onDeviceSelect={setSelectedDevice}
@@ -1093,42 +1152,42 @@ export default function Home() {
               </div>
             )}
 
-            {/* Users Tab */}
+            {/* Users Tab - Mobile Responsive */}
             {currentTab === 'users' && (
-              <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <h2 className="text-xl font-semibold">All Users</h2>
+              <div className="space-y-4 sm:space-y-6">
+                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-3 sm:space-y-0">
+                  <h2 className="text-lg sm:text-xl font-semibold">All Users</h2>
                   <div className="relative">
-                    <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                    <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
                     <input
                       type="text"
                       placeholder="Search users..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="pl-9 sm:pl-10 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-auto text-sm"
                     />
                   </div>
                 </div>
 
-                {/* Users Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {/* Users Grid - Mobile Responsive */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                   {filteredUsers.map((user) => (
-                    <div key={user.id} className="bg-white p-6 rounded-lg shadow-md border">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center">
-                          <span className="text-white font-medium">
+                    <div key={user.id} className="bg-white p-4 sm:p-6 rounded-lg shadow-md border">
+                      <div className="flex items-center space-x-3 sm:space-x-4">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                          <span className="text-white font-medium text-sm sm:text-base">
                             {user.username?.charAt(0)?.toUpperCase() || '?'}
                           </span>
                         </div>
-                        <div className="flex-1">
-                          <h3 className="text-lg font-medium">{user.username}</h3>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-base sm:text-lg font-medium truncate">{user.username}</h3>
                           {user.full_name && (
-                            <p className="text-sm text-gray-600">{user.full_name}</p>
+                            <p className="text-xs sm:text-sm text-gray-600 truncate">{user.full_name}</p>
                           )}
                         </div>
                       </div>
                       
-                      <div className="mt-4 text-xs text-gray-500">
+                      <div className="mt-3 sm:mt-4 text-xs text-gray-500">
                         Joined {format(new Date(user.created_at), 'MMM yyyy')}
                       </div>
                     </div>
@@ -1136,8 +1195,8 @@ export default function Home() {
                 </div>
 
                 {filteredUsers.length === 0 && (
-                  <div className="text-center py-12">
-                    <UserGroupIcon className="mx-auto h-12 w-12 text-gray-400" />
+                  <div className="text-center py-8 sm:py-12">
+                    <UserGroupIcon className="mx-auto h-10 w-10 sm:h-12 sm:w-12 text-gray-400" />
                     <h3 className="mt-2 text-sm font-medium text-gray-900">No users found</h3>
                     <p className="mt-1 text-sm text-gray-500">Try adjusting your search terms.</p>
                   </div>
